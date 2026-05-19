@@ -1,193 +1,103 @@
-# spotify-github-profile
+# jellyfin-github-profile
 
-Create Spotify now playing card on your github profile
+Show what you're currently watching/listening to on your self-hosted **Jellyfin**
+server as a live SVG card on your GitHub profile.
 
-Running on Vercel serverless function, store data in Firebase (store only access_token, refresh_token, token_expired_timestamp)
+Runs as a single self-hostable Docker container. No OAuth, no database, no
+third-party services; it just talks to your Jellyfin server with an API key.
 
-## Annoucements
+> [!NOTE]
+> A significant portion of this project was built by Claude in an afternoon. Don't use it if you don't trust it with your Jellyfin API key.
 
-**2024-06-21**
+## How it works
 
-Vercel change the package the free tier is not enough for our usage. I moved service to self-host at Digital Ocean.
+The app polls your Jellyfin server's `/Sessions` endpoint for the configured
+user and renders a "now playing" card (audio, movies and TV episodes). When
+nothing is playing it falls back to recently played history.
 
-Please replace your old endpoint `https://spotify-github-profile.vercel.app` to `https://spotify-github-profile.kittinanx.com`
+## Quick start
 
-## Table of Contents
-[Connect And Grant Permission](#connect-and-grant-permission)
-[Example](#example)
-[Customization](#customization)
-[Running for development locally](#running-for-development-locally)
-[Setting up Vercel](#setting-up-vercel)
-[Setting up Firebase](#setting-up-firebase)
-[Setting up Spotify dev](#setting-up-spotify-dev)
-[Running locally](#running-locally)
-[How to Contribute](#how-to-contribute)
-[Known Bugs](#known-bugs)
-[Credit](#credit)  
+1. **Create a Jellyfin API key**
+   Jellyfin dashboard → *Administration* → *API Keys* → **+**.
 
-## Connect And Grant Permission
+2. **Configure**: copy `.env.example` to `.env` and fill in:
 
-- Click `Connect with Spotify` button below to grant permission
+   ```sh
+   JELLYFIN_URL='https://jellyfin.example.com'
+   JELLYFIN_API_KEY='your-api-key'
+   JELLYFIN_USERNAME='your_username'
+   JELLYFIN_SELF_SIGNED_CERT='false'   # 'true' if Jellyfin uses a self-signed cert
+   ```
 
-[<img src="/img/btn-spotify.png">](https://spotify-github-profile.kittinanx.com/api/login)
+3. **Run**
 
-## Example
+   ```sh
+   docker compose up -d --build
+   ```
 
-- Default theme
+   The card is served at `http://localhost:8080/api/view`. `GET /healthz`
+   is a health endpoint; `GET /` shows config status and the embed snippet.
 
-![spotify-github-profile](/img/default.svg)
+4. **Embed in your GitHub profile README**
 
-- Compact theme
+   ```md
+   ![Now Playing](https://your-host.example.com/api/view?theme=default)
+   ```
 
-![spotify-github-profile](/img/compact.svg)
-
-- Natemoo-re theme
-
-![spotify-github-profile](/img/natemoo-re.svg)
-
-- Novatorem theme
-
-![spotify-github-profile](/img/novatorem.svg)
-
-- Karaoke theme
-
-![spotify-github-profile](/img/karaoke.svg)
-
-- Spotify Embed theme (NEW!)
-
-![spotify-github-profile](/img/spotify-embed.svg)
+   (`uid` is no longer required and is ignored if present.)
 
 ## Customization
 
-You can customize the appearance by adding query parameters to your URL:
+Add query parameters to the `/api/view` URL:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `theme` | Theme to use (`default`, `compact`, `natemoo-re`, `novatorem`, `karaoke`, `spotify-embed`, `apple`) | `default` |
+| `theme` | `default`, `compact`, `natemoo-re`, `novatorem`, `karaoke`, `spotify-embed`, `apple`, `apple-music`, `liquid-glass` | `default` |
 | `background_color` | Background color (hex without #) | `121212` |
 | `border_radius` | Border radius in pixels | `10` |
 | `bar_color` | Equalizer bar color (hex without #) | `53b14f` |
-| `bar_color_cover` | Extract bar color from album cover (`true`/`false`) | `false` |
-| `cover_image` | Show album cover image (`true`/`false`) | `true` |
-| `show_offline` | Show offline status when not playing (`true`/`false`) | `false` |
-| `interchange` | Swap artist and song name positions (`true`/`false`) | `false` |
+| `bar_color_cover` | Extract bar color from cover art (`true`/`false`) | `false` |
+| `cover_image` | Show cover/poster image (`true`/`false`) | `true` |
+| `show_offline` | Show an offline card when nothing is playing (`true`/`false`) | `false` |
+| `interchange` | Swap title and artist/series positions (`true`/`false`) | `false` |
 | `mode` | Color mode for supported themes (`light`/`dark`) | `light` |
+| `redirect` | `302` to the Jellyfin web detail page for the item (`true`/`false`) | `false` |
 
-### Example
+Two Jellyfin-native themes are included: **`liquid-glass`** (a translucent frosted-glass card over a blurred, saturated backdrop of the cover art, inspired by Apple's Liquid Glass design language), and **`apple-music`** (a modern Apple Music "now playing" layout with ambient art backdrop, scrubber and transport controls).
 
-```
-https://spotify-github-profile.kittinanx.com/api/view?uid=YOUR_UID&cover_image=true&theme=default&border_radius=15&bar_color=53b14f
-```
+## Deploying behind a reverse proxy
 
-## Running for development locally without Vercel
-
-To run the application locally without Vercel:
-
-1. Copy `.env.example` to `.env` in the root directory and replace the placeholder values with your actual configuration.
-
-2. Install the required dependencies:
-   ```sh
-   pip install -r api/requirements.txt
-   ```
-
-3. Run the application:
-   ```sh
-   python api/app.py
-   ```
-
-4. Access the login page at http://localhost:3000/api/login
-
-Note: Ensure your Spotify app's redirect URI is set to `http://localhost:3000/api/callback` and `BASE_URL` in `.env` is set to `http://localhost:3000/api`.
-
-
-## Running for development locally with Vercel
-
-To develop locally, you need:
-
-- A fork of this project as your repository
-- A Vercel project connected with the forked repository
-- A Firebase project with Cloud Firestore setup
-- A Spotify developer account
-
-### Setting up Vercel
-
-- [Create a new Vercel project by importing](https://vercel.com/import) the forked project on GitHub
-
-### Setting up Firebase
-
-- Create [a new Firebase project](https://console.firebase.google.com/u/0/)
-- Create a new Cloud Firestore in the project
-- Download configuration JSON file from _Project settings_ > _Service accounts_ > _Generate new private key_
-- Convert private key content as BASE64
-  - You can use Encode/Decode extension in VSCode to do so
-  - This key will be used in step explained below
-
-### Setting up Spotify dev
-
-- Login to [developer.spotify.com](https://developer.spotify.com/dashboard/applications)
-- Create a new project
-- Edit settings to add _Redirect URIs_
-  - add `http://localhost:3000/api/callback`
-
-### Running locally
-
-- Install [Vercel command line](https://vercel.com/download) with `npm i -g vercel`
-- Create `.env` file at the root of the project 
-- Paste your keys in `SPOTIFY_CLIENT_ID`, `SPOTIFY_SECRET_ID`, and insert the name of your downloaded JSON file in `FIREBASE`
-
+`deploy/` contains an example that runs the app behind nginx:
 
 ```sh
-BASE_URL='http://localhost:3000/api'
-SPOTIFY_CLIENT_ID='____'
-SPOTIFY_SECRET_ID='____'
-FIREBASE='__BASE64_FIREBASE_JSON_FILE__'
+cd deploy
+cp ../.env.example .env   # fill in JELLYFIN_*
+docker compose up -d --build
 ```
 
-- Run `vercel dev`
+`deploy/nginx.conf` proxies to the app and passes the app's `Cache-Control`
+header through unchanged. Terminate TLS at the proxy in production.
+
+## Running locally (without Docker)
 
 ```sh
-$ vercel dev
-Vercel CLI 20.1.2 dev (beta) — https://vercel.com/feedback
-> Ready! Available at http://localhost:3000
+pip install -r api/requirements.txt
+cp .env.example .env        # fill in JELLYFIN_*
+python api/app.py           # serves on http://localhost:8080
 ```
 
-- Now try to access http://localhost:3000/api/login
+## Tests
 
-### Run unittest
-
-- Run all tests
 ```sh
-pytest tests/ -v
-```
-
-- Run tests with coverage
-```sh
+pytest tests/ -v                       # all tests
 pytest tests/ --cov=api --cov-report=html
+pytest tests/test_util_jellyfin.py -v  # Jellyfin client unit tests
 ```
-
-- Run specific test file
-```sh
-pytest tests/test_api_view.py -v
-```
-
-- Run with maxfail (like CI)
-```sh
-pytest tests/ --maxfail=5 --disable-warnings -v
-```
-
-## How to Contribute
-
-- Develop locally and submit a pull request!
-- Submit newly encountered bugs to the [Issues](https://github.com/kittinan/spotify-github-profile/issues) page
-- Submit feature suggestions to the [Issues](https://github.com/kittinan/spotify-github-profile/issues) page, with the label [Feature Suggestion]
-
-## Known Bugs
-
-[404/500 Error when playing local files](https://github.com/kittinan/spotify-github-profile/issues/19)
-
-## Other Platforms
-- [Apple Music GitHub Profile](https://github.com/rayriffy/apple-music-github-profile)
 
 ## Credit
 
-Inspired by https://github.com/natemoo-re
+Jellyfin integration inspired by
+[JustRadical/jellyfin-rpc](https://github.com/JustRadical/jellyfin-rpc).
+Originally forked from
+[kittinan/spotify-github-profile](https://github.com/kittinan/spotify-github-profile);
+card themes inspired by https://github.com/natemoo-re.

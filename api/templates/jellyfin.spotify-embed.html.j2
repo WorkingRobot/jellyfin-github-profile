@@ -1,5 +1,5 @@
 <svg width="460" height="152" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-labelledby="cardTitle" role="img">
-  <title id="cardTitle">Now playing on Spotify</title>
+  <title id="cardTitle">Now playing on Jellyfin</title>
   <foreignObject width="460" height="152">
     <style>
       * {
@@ -110,7 +110,7 @@
         text-transform: uppercase;
         letter-spacing: 0.5px;
         {% if is_now_playing %}
-        color: #1db954;
+        color: #00A4DC;
         {% else %}
         color: #b3b3b3;
         {% endif %}
@@ -137,7 +137,7 @@
       .progress-bar-fill {
         height: 100%;
         {% if is_now_playing %}
-        background-color: #1db954;
+        background-color: #00A4DC;
         {% else %}
         {% if mode == 'dark' %}
         background-color: #535353;
@@ -147,7 +147,16 @@
         {% endif %}
         border-radius: 2px;
         transition: width 1s linear;
+        {% if is_now_playing and not is_paused and progress_data and progress_data.remaining_seconds %}
+        animation: embedfill {{ progress_data.remaining_seconds }}s linear forwards;
+        {% endif %}
       }
+      {% if progress_data %}
+      @keyframes embedfill {
+        from { width: {{ progress_data.progress_percentage }}%; }
+        to { width: 100%; }
+      }
+      {% endif %}
 
       .progress-times {
         display: flex;
@@ -183,7 +192,7 @@
             <img class="album-cover" src="data:image/jpeg;base64,{{img}}" alt="Album Cover" />
           {% else %}
             <svg class="spotify-icon" width="48" height="48" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+              <path d="M12 .002C8.826.002-1.398 18.537.16 21.666c1.56 3.129 22.14 3.094 23.682 0C25.384 18.573 15.177 0 12 0zm7.76 18.949c-1.008 2.028-14.493 2.05-15.514 0C3.224 16.9 9.92 4.755 12.003 4.755c2.081 0 8.77 12.166 7.759 14.196zM12 9.198c-1.054 0-4.446 6.15-3.93 7.189.518 1.04 7.348 1.027 7.86 0 .511-1.027-2.874-7.19-3.93-7.19z"/>
             </svg>
           {% endif %}
         </div>
@@ -193,7 +202,7 @@
             <div class="artist-name">{{artist_name|safe}}</div>
             <div class="spotify-logo-container">
               <svg class="spotify-logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path fill="#1db954" d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                <path fill="#00A4DC" d="M12 .002C8.826.002-1.398 18.537.16 21.666c1.56 3.129 22.14 3.094 23.682 0C25.384 18.573 15.177 0 12 0zm7.76 18.949c-1.008 2.028-14.493 2.05-15.514 0C3.224 16.9 9.92 4.755 12.003 4.755c2.081 0 8.77 12.166 7.759 14.196zM12 9.198c-1.054 0-4.446 6.15-3.93 7.189.518 1.04 7.348 1.027 7.86 0 .511-1.027-2.874-7.19-3.93-7.19z"/>
               </svg>
               <span class="status-text">{{ title_text }}</span>
             </div>
@@ -209,10 +218,10 @@
             <div class="progress-times">
               {% if progress_data %}
                 <span>{{ progress_data.current_time }}</span>
-                <span>{{ progress_data.remaining_time }}</span>
+                <span>{{ progress_data.total_time }}</span>
               {% else %}
                 <span>0:00</span>
-                <span>-{{song_name|length // 10}}:{{(song_name|length % 10) * 6}}</span>
+                <span>0:00</span>
               {% endif %}
             </div>
           </div>
@@ -220,11 +229,11 @@
       {% else %}
         <div class="album-cover-container">
           <svg class="spotify-icon" width="48" height="48" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+            <path d="M12 .002C8.826.002-1.398 18.537.16 21.666c1.56 3.129 22.14 3.094 23.682 0C25.384 18.573 15.177 0 12 0zm7.76 18.949c-1.008 2.028-14.493 2.05-15.514 0C3.224 16.9 9.92 4.755 12.003 4.755c2.081 0 8.77 12.166 7.759 14.196zM12 9.198c-1.054 0-4.446 6.15-3.93 7.189.518 1.04 7.348 1.027 7.86 0 .511-1.027-2.874-7.19-3.93-7.19z"/>
           </svg>
         </div>
         <div class="track-info-container">
-          <div class="offline-placeholder">Not currently playing on Spotify</div>
+          <div class="offline-placeholder">Not currently playing on Jellyfin</div>
         </div>
       {% endif %}
     </div>

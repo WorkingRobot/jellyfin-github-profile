@@ -8,7 +8,7 @@ app = Flask(__name__)
 @app.route("/<path:path>")
 def catch_all(path):
 
-    artist_name = "Spotify Github Profile"
+    artist_name = "Jellyfin Github Profile"
     song_name = "Revolution with very long text - ft. someone"
 
     img_url = "https://avatars1.githubusercontent.com/u/144775?s=300&v=4"

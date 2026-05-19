@@ -2,19 +2,15 @@ from flask import Flask, Response, jsonify, render_template, redirect, request
 from base64 import b64decode, b64encode
 from dotenv import load_dotenv, find_dotenv
 
-from util.firestore import get_firestore_db
 from util.profanity import profanity_check
 from util.remaster import remove_remaster
 
 load_dotenv(find_dotenv())
 
-from sys import getsizeof
 from PIL import Image, ImageFile
 
-from time import time
-
 import io
-from util import spotify
+from util import jellyfin
 import random
 import requests
 import functools
@@ -26,9 +22,6 @@ import re
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 print("Starting Server")
-
-db = get_firestore_db()
-CACHE_TOKEN_INFO = {}
 
 app = Flask(__name__)
 
@@ -50,10 +43,13 @@ def generate_css_bar(num_bar=75):
     return css_bar
 
 
+_IMG_SESSION = requests.Session()
+
+
 @functools.lru_cache(maxsize=128)
 def load_image(url):
     try:
-        response = requests.get(url, timeout=10)
+        response = _IMG_SESSION.get(url, timeout=10)
         response.raise_for_status()
         return response.content
     except requests.exceptions.RequestException as e:
@@ -102,29 +98,36 @@ def format_time_ms(milliseconds):
 
 
 def calculate_progress_data(progress_ms, duration_ms):
-    """Calculate progress percentage and formatted times"""
-    if not progress_ms or not duration_ms or duration_ms <= 0:
+    """Calculate progress percentage and formatted times.
+
+    Only a valid duration is required: when progress is unknown/zero (e.g. a
+    recently-played item) we still report the real track length and remaining
+    time instead of collapsing to 0:00 / 0:00.
+    """
+    if not duration_ms or duration_ms <= 0:
         return {
             "progress_percentage": 0,
             "current_time": "0:00",
             "remaining_time": "0:00",
+            "total_time": "0:00",
+            "remaining_seconds": 0,
         }
 
-    # Ensure progress doesn't exceed duration
-    progress_ms = min(progress_ms, duration_ms)
+    # Clamp progress into [0, duration]
+    progress_ms = min(max(progress_ms or 0, 0), duration_ms)
 
-    # Calculate percentage
     progress_percentage = (progress_ms / duration_ms) * 100
-
-    # Format times
-    current_time = format_time_ms(progress_ms)
     remaining_ms = duration_ms - progress_ms
-    remaining_time = f"-{format_time_ms(remaining_ms)}"
 
     return {
         "progress_percentage": progress_percentage,
-        "current_time": current_time,
-        "remaining_time": remaining_time,
+        "current_time": format_time_ms(progress_ms),
+        # Apple-style countdown (negative). Spotify-style themes use total_time.
+        "remaining_time": f"-{format_time_ms(remaining_ms)}",
+        "total_time": format_time_ms(duration_ms),
+        # Seconds left in the track; used to animate the progress bar in
+        # real time for the currently-playing card.
+        "remaining_seconds": max(int(remaining_ms / 1000), 0),
     }
 
 
@@ -143,6 +146,7 @@ def make_svg(
     border_radius="10",
     progress_ms=None,
     duration_ms=None,
+    is_paused=False,
 ):
     height = 0
     num_bar = 75
@@ -165,6 +169,12 @@ def make_svg(
     elif theme == "apple":
         height = 534
         num_bar = 0
+    elif theme == "apple-music":
+        height = 470
+        num_bar = 0
+    elif theme == "liquid-glass":
+        height = 460
+        num_bar = 0
     elif theme == "spotify-embed":
         height = 152
         num_bar = 0
@@ -175,7 +185,7 @@ def make_svg(
             height = 145
 
     if is_now_playing:
-        title_text = "Now playing"
+        title_text = "Paused" if is_paused else "Now playing"
         content_bar = "".join(["<div class='bar'></div>" for i in range(num_bar)])
         css_bar = generate_css_bar(num_bar)
     elif show_offline:
@@ -189,7 +199,10 @@ def make_svg(
 
     # Calculate progress data for Apple and Spotify Embed themes
     progress_data = {}
-    if theme in ["apple", "spotify-embed"] and duration_ms is not None:
+    if (
+        theme in ["apple", "apple-music", "liquid-glass", "spotify-embed"]
+        and duration_ms is not None
+    ):
         if is_now_playing and progress_ms is not None:
             # Currently playing - show real progress
             progress_data = calculate_progress_data(progress_ms, duration_ms)
@@ -211,143 +224,42 @@ def make_svg(
         "background_color": background_color,
         "mode": mode,
         "is_now_playing": is_now_playing,
+        "is_paused": is_paused,
         "progress_data": progress_data,
         "border_radius": border_radius,
     }
 
-    return render_template(f"spotify.{theme}.html.j2", **rendered_data)
+    return render_template(f"jellyfin.{theme}.html.j2", **rendered_data)
 
 
-def get_cache_token_info(uid):
-    global CACHE_TOKEN_INFO
+def get_song_info(show_offline):
+    """Return (normalized_item, is_now_playing).
 
-    token_info = CACHE_TOKEN_INFO.get(uid, None)
+    Item shape comes from util.jellyfin (provider-agnostic). Falls back to
+    recently played history when nothing is currently playing.
+    """
+    item = jellyfin.get_now_playing()
+    if item:
+        return item, True
 
-    if type(token_info) == dict:
-        current_ts = int(time())
-        expired_ts = token_info.get("expired_ts")
-        if expired_ts is None or current_ts >= expired_ts:
-            return None
+    if show_offline:
+        return None, False
 
-    return token_info
+    recent = jellyfin.get_recently_played()
+    if not recent:
+        return None, False
 
-
-def delete_cache_token_info(uid):
-    global CACHE_TOKEN_INFO
-
-    if uid in CACHE_TOKEN_INFO:
-        del CACHE_TOKEN_INFO[uid]
-
-
-def get_access_token(uid):
-    global CACHE_TOKEN_INFO
-
-    # Load token from cache memory
-    token_info = get_cache_token_info(uid)
-
-    if token_info is None:
-        # Load from firebase
-        doc_ref = db.collection("users").document(uid)
-        doc = doc_ref.get()
-
-        if not doc.exists:
-            print("not exist data in firebase: {}".format(uid))
-            return None
-
-        token_info = doc.to_dict()
-
-        CACHE_TOKEN_INFO[uid] = token_info
-
-    current_ts = int(time())
-    access_token = token_info.get("access_token", None)
-    print(access_token)
-
-    # Check token expired
-    expired_ts = token_info.get("expired_ts")
-    if expired_ts is None or current_ts >= expired_ts:
-        # Refresh token
-        refresh_token = token_info["refresh_token"]
-
-        new_token = spotify.refresh_token(refresh_token)
-
-        # Handle refresh token revoke
-        if new_token.get("error") == "invalid_grant":
-            # Delete token in firebase
-            doc_ref = db.collection("users").document(uid)
-            doc_ref.delete()
-
-            # Delete token in memory cache
-            delete_cache_token_info(uid)
-            return None
-
-        expired_ts = int(time()) + new_token["expires_in"]
-        update_data = {
-            "access_token": new_token["access_token"],
-            "expired_ts": expired_ts,
-        }
-        doc_ref = db.collection("users").document(uid)
-        doc_ref.update(update_data)
-
-        access_token = new_token["access_token"]
-
-        # Save in memory cache
-        CACHE_TOKEN_INFO[uid] = update_data
-
-    return access_token
-
-
-def get_song_info(uid, show_offline):
-    access_token = get_access_token(uid)
-
-    item = None
-    is_now_playing = False
-    progress_ms = None
-    duration_ms = None
-
-    # Handle refrest_token revoke or invalid token
-    if access_token is None:
-        raise spotify.InvalidTokenError("Invalid Spotify access_token or refresh_token")
-
-    data = spotify.get_now_playing(access_token)
-
-    if data:
-        item = data["item"]
-        item["currently_playing_type"] = data["currently_playing_type"]
-        is_now_playing = True
-
-        # Extract progress data for currently playing tracks
-        progress_ms = data.get("progress_ms")
-        if item and item.get("duration_ms"):
-            duration_ms = item["duration_ms"]
-    elif show_offline:
-        return None, False, None, None
-    else:
-        recent_plays = spotify.get_recently_play(access_token)
-        size_recent_play = len(recent_plays["items"])
-
-        # Handle empty recently play, should offline
-        if size_recent_play == 0:
-            return None, False, None, None
-
-        idx = random.randint(0, size_recent_play - 1)
-        item = recent_plays["items"][idx]["track"]
-        item["currently_playing_type"] = "track"
-        is_now_playing = False
-        # No progress data for recently played tracks, but get duration
-        if item and item.get("duration_ms"):
-            duration_ms = item["duration_ms"]
-
-    return item, is_now_playing, progress_ms, duration_ms
+    return random.choice(recent), False
 
 
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def catch_all(path):
-    uid = request.args.get("uid")
+    # uid is accepted for README backward-compat but ignored (single-user).
     cover_image = request.args.get("cover_image", default="true") == "true"
     is_redirect = request.args.get("redirect", default="false") == "true"
     theme = request.args.get("theme", default="default")
-    bar_color = request.args.get("bar_color", default="53b14f")
+    bar_color = request.args.get("bar_color", default="00a4dc")
     background_color = request.args.get("background_color", default="121212")
     is_bar_color_from_cover = (
         request.args.get("bar_color_cover", default="false") == "true"
@@ -359,31 +271,23 @@ def catch_all(path):
     is_enable_profanity = request.args.get("profanity", default="false") == "true"
     hide_remaster = request.args.get("hide_remaster", default="false") == "true"
 
-    # Handle invalid request
-    if not uid:
-        return Response("not ok")
-    
     if not re.match(r'^\d+$', border_radius):
         border_radius = "10"
 
     try:
-        item, is_now_playing, progress_ms, duration_ms = get_song_info(
-            uid, show_offline
-        )
-    except spotify.InvalidTokenError as e:
-
-        # Handle invalid token
-        return Response(
-            "Error: Invalid Spotify access_token or refresh_token. Possibly the token revoked. Please re-login at https://github.com/kittinan/spotify-github-profile"
-        )
+        item, is_now_playing = get_song_info(show_offline)
+    except jellyfin.InvalidConfigError as e:
+        return Response(f"Error: {e}")
 
     if (show_offline and not is_now_playing) or (item is None):
         if interchange:
-            artist_name = "Currently not playing on Spotify"
+            artist_name = "Currently not playing on Jellyfin"
             song_name = "Offline"
         else:
             artist_name = "Offline"
-            song_name = "Currently not playing on Spotify"
+            song_name = "Currently not playing on Jellyfin"
+        progress_ms = None
+        duration_ms = None
         img_b64 = ""
         cover_image = False
         svg = make_svg(
@@ -405,19 +309,16 @@ def catch_all(path):
         resp.headers["Cache-Control"] = "s-maxage=1"
         return resp
 
-    currently_playing_type = item.get("currently_playing_type", "track")
+    progress_ms = item.get("progress_ms")
+    duration_ms = item.get("duration_ms")
 
-    if is_redirect:
-        return redirect(item["uri"], code=302)
+    if is_redirect and item.get("detail_url"):
+        return redirect(item["detail_url"], code=302)
 
     img = None
     img_b64 = ""
-    if cover_image:
-
-        if currently_playing_type == "track":
-            img = load_image(item["album"]["images"][1]["url"])
-        elif currently_playing_type == "episode":
-            img = load_image(item["images"][1]["url"])
+    if cover_image and item.get("image_url"):
+        img = load_image(item["image_url"])
 
         # Only convert to base64 if image was successfully loaded
         if img is not None:
@@ -450,14 +351,10 @@ def catch_all(path):
             bar_color = "%02x%02x%02x" % (rgb.r, rgb.g, rgb.b)
             break
 
-    # Find artist_name and song_name
-    if currently_playing_type == "track":
-        artist_name = item["artists"][0]["name"]
-        song_name = item["name"]
-
-    elif currently_playing_type == "episode":
-        artist_name = item["show"]["publisher"]
-        song_name = item["name"]
+    # Artist/song come pre-normalized from the Jellyfin layer for audio,
+    # movie and episode items, so the card layout is provider-agnostic.
+    artist_name = item["artist_name"]
+    song_name = item["song_name"]
 
     # Handle profanity filtering
     if is_enable_profanity:
@@ -487,12 +384,11 @@ def catch_all(path):
         border_radius,
         progress_ms,
         duration_ms,
+        item.get("is_paused", False),
     )
 
     resp = Response(svg, mimetype="image/svg+xml")
     resp.headers["Cache-Control"] = "s-maxage=1"
-
-    print("cache size:", getsizeof(CACHE_TOKEN_INFO))
 
     return resp
 

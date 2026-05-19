@@ -1,0 +1,257 @@
+<svg width="400" height="{{height}}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-labelledby="cardTitle" role="img">
+  <title id="cardTitle">Now playing on Jellyfin</title>
+  <foreignObject width="400" height="{{height}}">
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      .card {
+        position: relative;
+        width: 400px;
+        height: {{height}}px;
+        overflow: hidden;
+        border-radius: {{border_radius}}px;
+        background: #07080b;
+        font-family: "SF Pro Display", "SF Pro Text", -apple-system,
+          BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
+      }
+
+      .bg {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        filter: blur(44px) saturate(210%) brightness(0.58);
+        transform: scale(1.18);
+      }
+
+      .bg-fallback {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        background:
+          radial-gradient(120% 120% at 25% 15%, #{{bar_color|safe}}cc, transparent 60%),
+          radial-gradient(120% 120% at 80% 90%, #00a4dc99, transparent 55%),
+          #07080b;
+      }
+
+      .tint {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        background:
+          linear-gradient(180deg, rgba(7,8,11,0.10) 0%, rgba(7,8,11,0.55) 100%),
+          radial-gradient(140% 90% at 50% -10%, rgba(255,255,255,0.10), transparent 60%);
+      }
+
+      .glass {
+        position: relative;
+        z-index: 1;
+        margin: 16px;
+        height: {{ height - 32 }}px;
+        border-radius: 30px;
+        padding: 30px 26px 26px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        overflow: hidden;
+        background: linear-gradient(135deg,
+          rgba(255,255,255,0.20) 0%,
+          rgba(255,255,255,0.08) 45%,
+          rgba(255,255,255,0.05) 100%);
+        border: 1px solid rgba(255,255,255,0.22);
+        box-shadow:
+          0 12px 48px rgba(0,0,0,0.50),
+          inset 0 1px 1px rgba(255,255,255,0.55),
+          inset 0 -1px 2px rgba(0,0,0,0.30);
+      }
+
+      .sheen {
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        background: linear-gradient(125deg,
+          rgba(255,255,255,0.30) 0%,
+          rgba(255,255,255,0.06) 22%,
+          transparent 42%);
+        pointer-events: none;
+      }
+
+      .art {
+        position: relative;
+        z-index: 1;
+        width: 188px;
+        height: 188px;
+        border-radius: 26px;
+        object-fit: cover;
+        box-shadow:
+          0 18px 38px rgba(0,0,0,0.55),
+          inset 0 0 0 1px rgba(255,255,255,0.16);
+      }
+
+      .art-fallback {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255,255,255,0.10);
+      }
+
+      .meta { position: relative; z-index: 1; text-align: center; margin-top: 22px; width: 100%; }
+
+      .title {
+        color: #fff;
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: -0.4px;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .artist {
+        color: rgba(255,255,255,0.64);
+        font-size: 15px;
+        font-weight: 500;
+        margin-top: 5px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .pill {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-top: 16px;
+        padding: 6px 14px 6px 10px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.12);
+        border: 1px solid rgba(255,255,255,0.18);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.30);
+      }
+
+      .pill svg { width: 15px; height: 15px; display: block; }
+
+      .pill span {
+        color: rgba(255,255,255,0.90);
+        font-size: 10.5px;
+        font-weight: 700;
+        letter-spacing: 1.6px;
+        text-transform: uppercase;
+      }
+
+      {% if is_now_playing and not is_paused %}
+      .dot {
+        width: 6px; height: 6px; border-radius: 50%;
+        background: #00d0ff;
+        box-shadow: 0 0 8px #00d0ff;
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 0.35; transform: scale(0.8); }
+        50% { opacity: 1; transform: scale(1.15); }
+      }
+      {% else %}
+      .dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.4); }
+      {% endif %}
+
+      .progress { position: relative; z-index: 1; width: 100%; margin-top: auto; padding-top: 22px; }
+
+      .track {
+        position: relative;
+        height: 5px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.18);
+        box-shadow: inset 0 1px 1px rgba(0,0,0,0.35);
+        overflow: hidden;
+      }
+
+      .fill {
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: {{ progress_data.progress_percentage if progress_data else 0 }}%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #00a4dc, #6fe3ff);
+        box-shadow: 0 0 10px rgba(0,164,220,0.8);
+        {% if is_now_playing and not is_paused and progress_data and progress_data.remaining_seconds %}
+        animation: fillgrow {{ progress_data.remaining_seconds }}s linear forwards;
+        {% endif %}
+      }
+
+      @keyframes fillgrow {
+        from { width: {{ progress_data.progress_percentage if progress_data else 0 }}%; }
+        to { width: 100%; }
+      }
+
+      .times {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 9px;
+        color: rgba(255,255,255,0.58);
+        font-size: 11px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .offline {
+        position: relative;
+        z-index: 1;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        color: rgba(255,255,255,0.7);
+      }
+      .offline .title { color: rgba(255,255,255,0.92); }
+    </style>
+
+    <div xmlns="http://www.w3.org/1999/xhtml" class="card">
+      {% if cover_image and img %}
+      <img class="bg" src="data:image/jpeg;base64,{{img}}" alt="" />
+      {% else %}
+      <div class="bg-fallback"></div>
+      {% endif %}
+      <div class="tint"></div>
+      <div class="glass">
+        <div class="sheen"></div>
+        {% if song_name %}
+          {% if cover_image and img %}
+            <img class="art" src="data:image/jpeg;base64,{{img}}" alt="Cover" />
+          {% else %}
+            <div class="art art-fallback">
+              <svg width="64" height="64" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="#00A4DC" d="M12 .002C8.826.002-1.398 18.537.16 21.666c1.56 3.129 22.14 3.094 23.682 0C25.384 18.573 15.177 0 12 0zm7.76 18.949c-1.008 2.028-14.493 2.05-15.514 0C3.224 16.9 9.92 4.755 12.003 4.755c2.081 0 8.77 12.166 7.759 14.196zM12 9.198c-1.054 0-4.446 6.15-3.93 7.189.518 1.04 7.348 1.027 7.86 0 .511-1.027-2.874-7.19-3.93-7.19z"/></svg>
+            </div>
+          {% endif %}
+          <div class="meta">
+            <div class="title">{{ song_name|safe }}</div>
+            <div class="artist">{{ artist_name|safe }}</div>
+          </div>
+          <div class="pill">
+            <span class="dot"></span>
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="#4fc8f0" d="M12 .002C8.826.002-1.398 18.537.16 21.666c1.56 3.129 22.14 3.094 23.682 0C25.384 18.573 15.177 0 12 0zm7.76 18.949c-1.008 2.028-14.493 2.05-15.514 0C3.224 16.9 9.92 4.755 12.003 4.755c2.081 0 8.77 12.166 7.759 14.196zM12 9.198c-1.054 0-4.446 6.15-3.93 7.189.518 1.04 7.348 1.027 7.86 0 .511-1.027-2.874-7.19-3.93-7.19z"/></svg>
+            <span>{{ title_text }}</span>
+          </div>
+          <div class="progress">
+            <div class="track"><div class="fill"></div></div>
+            {% if progress_data %}
+            <div class="times">
+              <span>{{ progress_data.current_time }}</span>
+              <span>{{ progress_data.remaining_time }}</span>
+            </div>
+            {% endif %}
+          </div>
+        {% else %}
+          <div class="offline">
+            <svg width="42" height="42" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="rgba(255,255,255,0.5)" d="M12 .002C8.826.002-1.398 18.537.16 21.666c1.56 3.129 22.14 3.094 23.682 0C25.384 18.573 15.177 0 12 0zm7.76 18.949c-1.008 2.028-14.493 2.05-15.514 0C3.224 16.9 9.92 4.755 12.003 4.755c2.081 0 8.77 12.166 7.759 14.196zM12 9.198c-1.054 0-4.446 6.15-3.93 7.189.518 1.04 7.348 1.027 7.86 0 .511-1.027-2.874-7.19-3.93-7.19z"/></svg>
+            <div class="title">Nothing playing on Jellyfin</div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </foreignObject>
+</svg>

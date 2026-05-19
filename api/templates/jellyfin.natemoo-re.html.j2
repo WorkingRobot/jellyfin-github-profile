@@ -1,5 +1,5 @@
 <svg width="320" height="{{height}}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-labelledby="cardTitle" role="img">
-  <title id="cardTitle">Now playing on Spotify</title>
+  <title id="cardTitle">Now playing on Jellyfin</title>
   <foreignObject width="320" height="{{height}}">
     <style>
       div {
@@ -11,6 +11,7 @@
         align-items: center;
 
         border-radius: {{border_radius}}px;
+        background: #{{background_color}};
 
         padding: 10px 10px
       }
@@ -21,7 +22,7 @@
 
       .cover {
         border-radius: 1px;
-
+        object-fit: cover;
         margin-right: 10px;
       }
 
@@ -30,7 +31,7 @@
         justify-content: center;
         align-items: center;
 
-        color: #53b14f;
+        color: #00A4DC;
         font-weight: bold;
         text-align: center;
 
@@ -45,38 +46,18 @@
       }
 
       .artist {
-        color: #121212;
-        font-weight: 500;
+        color: #f4f4f5;
+        font-weight: 600;
         font-size: 14px;
 
         margin-bottom: 3px;
       }
 
       .song {
-        color: #212122;
+        color: rgba(244, 244, 245, 0.62);
         font-size: 14px;
 
         margin-bottom: 18px;
-      }
-
-      @media (prefers-color-scheme: light) {
-        .artist{
-          color: #121212;
-        }
-
-        .song{
-          color: #212122;
-        }
-      }
-
-      @media (prefers-color-scheme: dark) {
-        .artist{
-          color: #f4f4f4;
-        }
-
-        .song{
-          color: #dbdbdc;
-        }
       }
 
       #bars {
@@ -94,6 +75,7 @@
         position: absolute;
         width: 3px;
         animation: sound 0ms -800ms linear infinite alternate;
+        {% if is_paused %}animation-play-state: paused;{% endif %}
       }
 
       @keyframes sound {
@@ -123,7 +105,7 @@
           <div id='bars'>{{content_bar|safe}}</div>
         </div>
       {% else %}
-        <div class="playing not-play">Nothing playing on Spotify</div>
+        <div class="playing not-play">Nothing playing on Jellyfin</div>
       {% endif %}
 
     </div>
